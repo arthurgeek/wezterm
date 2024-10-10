@@ -27,7 +27,7 @@ use url::Url;
 use wezterm_dynamic::Value;
 use wezterm_term::color::ColorPalette;
 use wezterm_term::{
-    Alert, Clipboard, KeyCode, KeyModifiers, Line, MouseEvent, StableRowIndex,
+    Alert, Clipboard, KeyCode, KeyModifiers, Line, MouseEvent, SemanticZone, StableRowIndex,
     TerminalConfiguration, TerminalSize,
 };
 
@@ -625,6 +625,10 @@ impl Pane for ClientPane {
 
     fn get_config(&self) -> Option<Arc<dyn TerminalConfiguration>> {
         self.config.lock().clone()
+    }
+
+    fn get_semantic_zones(&self) -> anyhow::Result<Vec<SemanticZone>> {
+        self.renderable.lock().get_semantic_zones()
     }
 }
 

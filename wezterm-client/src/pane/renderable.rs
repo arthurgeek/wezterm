@@ -22,7 +22,7 @@ use termwiz::color::AnsiColor;
 use termwiz::image::{ImageCell, ImageData};
 use termwiz::surface::{SequenceNo, SEQ_ZERO};
 use url::Url;
-use wezterm_term::{KeyCode, KeyModifiers, Line, StableRowIndex};
+use wezterm_term::{KeyCode, KeyModifiers, Line, SemanticZone, StableRowIndex};
 
 const MAX_POLL_INTERVAL: Duration = Duration::from_secs(30);
 const BASE_POLL_INTERVAL: Duration = Duration::from_millis(20);
@@ -856,5 +856,52 @@ impl RenderableState {
 
     pub fn get_dimensions(&self) -> RenderableDimensions {
         self.inner.borrow().dimensions
+    }
+
+    pub fn get_semantic_zones(&self) -> anyhow::Result<Vec<SemanticZone>> {
+        let mut current_zone: Option<SemanticZone> = None;
+        let mut zones = vec![];
+
+        let dims = self.get_dimensions();
+        let bottom_row = dims.physical_top + dims.viewport_rows as isize;
+        let top_row = bottom_row.saturating_sub(dims.scrollback_rows as isize);
+
+        let (first_stable_row, mut lines) = self.get_lines(top_row..bottom_row);
+
+        for (idx, line) in lines.iter_mut().enumerate() {
+            let stable_row = first_stable_row + idx as StableRowIndex;
+
+            for zone_range in line.semantic_zone_ranges() {
+                let new_zone = match current_zone.as_ref() {
+                    None => true,
+                    Some(zone) => zone.semantic_type != zone_range.semantic_type,
+                };
+
+                if new_zone {
+                    if let Some(zone) = current_zone.take() {
+                        zones.push(zone);
+                    }
+
+                    current_zone.replace(SemanticZone {
+                        start_x: zone_range.range.start as usize,
+                        start_y: stable_row,
+                        end_x: zone_range.range.end as usize,
+                        end_y: stable_row,
+                        semantic_type: zone_range.semantic_type,
+                    });
+                }
+
+                if let Some(zone) = current_zone.as_mut() {
+                    zone.end_x = zone_range.range.end as usize;
+                    zone.end_y = stable_row;
+                }
+            }
+        }
+
+        if let Some(zone) = current_zone.take() {
+            zones.push(zone);
+        }
+
+        Ok(zones)
     }
 }
